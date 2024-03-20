@@ -1,0 +1,89 @@
+plugins {
+	id 'java'
+	id 'org.springframework.boot' version '3.1.9'
+	id 'io.spring.dependency-management' version '1.1.4'
+}
+
+group = 'com.example'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	sourceCompatibility = '21'
+}
+
+configurations {
+	compileOnly {
+		extendsFrom annotationProcessor
+	}
+}
+
+apply plugin: 'java'
+apply plugin: 'org.springframework.boot'
+
+repositories {
+	mavenCentral()
+}
+
+dependencies {
+	implementation 'org.springframework.boot:spring-boot-starter-integration'
+	implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+	implementation 'org.springframework.boot:spring-boot-starter-web'
+	implementation 'org.springframework.integration:spring-integration-http'
+	implementation 'org.springframework.integration:spring-integration-file'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+	implementation 'org.springframework.integration:spring-integration-jpa'
+	compileOnly 'org.projectlombok:lombok'
+	runtimeOnly 'org.postgresql:postgresql'
+	annotationProcessor 'org.projectlombok:lombok'
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+	testImplementation 'org.springframework.integration:spring-integration-test'
+}
+
+tasks.named('bootBuildImage') {
+	builder = 'paketobuildpacks/builder-jammy-base:latest'
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}
+
+tasks.withType(Jar) {
+	archiveFileName = 'myapp.jar'
+}
+
+task buildDocker(type: Exec) {
+	commandLine 'docker', 'build', '-t', 'demo-integration-sidecar', '-f', 'src/main/resources/docker/Dockerfile', '.'
+}
+
+task copyToResources(type: Copy) {
+	from('build/libs/')
+	into 'src/main/resources/docker'
+	dependsOn tasks.named('bootJar')
+}
+
+task runApp(type: Exec) {
+
+	// Ajouter un script pour vérifier si l'image existe avant de décider de construire
+	doLast {
+		def imageExists = "docker images -q demo-integration-sidecar".execute().text.trim()
+		if (imageExists) {
+			// L'image existe déjà, pas besoin de construire
+			println "L'image demo-integration-sidecar existe déjà. Exécutez docker-compose up."
+		} else {
+			// L'image n'existe pas, construire l'image
+			println "L'image demo-integration-sidecar n'existe pas. Construction de l'image..."
+			tasks.named('buildDocker').execute()
+		}
+	}
+
+	// Exécutez docker-compose up après avoir vérifié l'existence de l'image
+	commandLine 'docker-compose', 'up', '-d'
+}
+
+
+buildDocker.dependsOn bootJar
+//s'assurer que l'image est buildée et le jar copié
+runApp.configure {
+	dependsOn copyToResources, buildDocker
+}
+

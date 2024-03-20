@@ -1,0 +1,18 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: kafka-pubsub
+spec:
+  type: pubsub.kafka
+  version: v1
+  metadata:
+    - name: brokers
+      value: "localhost:9092"
+    - name: authType
+      value: "none"  # Vous utilisez Kafka localement, donc pas d'authentification SASL
+    - name: version
+      value: 2.0.0
+  topics:
+    - "error-topic"
+    - "pizza-topic"
+    - "pasta-topic"

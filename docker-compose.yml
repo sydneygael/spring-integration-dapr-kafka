@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  demo-integration:
+    image: "demo-integration-sidecar:latest"
+    container_name: "app-integration"
+    ports:
+      - "8080:8080"
+      - "3500:3500"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker  # Active le profil "docker" dans l'application
+    volumes:
+      - ./src/main/resources/docker/myapp.jar:/app/myapp.jar
+      - ./src/main/resources/input:/app/input
+    depends_on:
+      - kafka
+      - postgres
+
+  zookeeper:
+    image: wurstmeister/zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    networks:
+      - kafka-net
+  kafka:
+    image: wurstmeister/kafka
+    container_name: kafka
+    ports:
+      - "9092:9092"
+    networks:
+      - kafka-net
+    environment:
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka:9092,OUTSIDE://localhost:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+      KAFKA_LISTENERS: INSIDE://0.0.0.0:9092,OUTSIDE://0.0.0.0:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+
+  postgres:
+    image: postgres:latest
+    ports:
+      - "5432:5432"  # Port d'écoute de PostgreSQL
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: demo
+
+networks:
+  kafka-net:
+    driver: bridge

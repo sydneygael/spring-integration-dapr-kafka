@@ -1,0 +1,11 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: pubsub
+spec:
+  pubsubName: kafka-pubsub
+  pubsubConfig:
+    kafka:
+      brokers: "localhost:9092"
+      authType: "none"  # Ajustez cela en fonction de votre configuration Kafka
+  scope: "integration-dapr-demo"
