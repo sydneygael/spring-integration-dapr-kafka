@@ -1,18 +1,13 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: kafka-bindings
+  name: kafka-pubsub
 spec:
-  type: bindings.kafka
-  version: v1
+  type: pubsub.kafka
   metadata:
     - name: brokers
-      value: "localhost:9092"
+      value: "localhost:9092"  # Adresse et port du ou des brokers Kafka
     - name: authType
-      value: "none"  # Vous utilisez Kafka localement, donc pas d'authentification SASL
+      value: "none"  # Type d'authentification (none, sasl, etc.)
     - name: version
-      value: 2.0.0
-    - name: direction
-      value: "input, output"
-    - name: topics
-      value: "error-topic,pizza-topic,pasta-topic"
+      value: "2.0.0"  # Version de Kafka

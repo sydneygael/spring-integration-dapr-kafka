@@ -2,7 +2,6 @@ package com.example.sadjoum.config;
 
 import com.example.sadjoum.model.Order;
 import com.example.sadjoum.repository.OrderRepository;
-import com.example.sadjoum.transformer.NewlineSplitter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -12,23 +11,25 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
+import org.springframework.integration.channel.QueueChannel;
 import org.springframework.integration.config.EnableIntegration;
 import org.springframework.integration.core.GenericTransformer;
 import org.springframework.integration.dsl.IntegrationFlow;
+import org.springframework.integration.dsl.MessageChannels;
 import org.springframework.integration.file.dsl.Files;
 import org.springframework.integration.handler.LoggingHandler;
 import org.springframework.integration.http.dsl.Http;
 import org.springframework.messaging.support.ErrorMessage;
 
 import java.io.File;
+import java.io.IOException;
+import java.util.List;
+import java.util.UUID;
 
 @Configuration
 @EnableIntegration
 @Slf4j
 public class IntegrationConfig {
-
-    // URL de l'endPoint pour les liaisons Kafka
-    public static final String KAFKA_BINDINGS_URL = "http://localhost:3500/v1.0/bindings/kafka-bindings";
     @Value("${datasource.inputFolder}")
     private String inputFolder;
 
@@ -37,6 +38,11 @@ public class IntegrationConfig {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Bean
+    QueueChannel errorChannel() {
+        return new QueueChannel(500);
+    }
+
     // Configuration du flux d'intégration pour traiter les fichiers CSV
     @Bean
     public IntegrationFlow csvToDatabaseKafkaFlow() {
@@ -44,13 +50,25 @@ public class IntegrationConfig {
                                 .preventDuplicates(true)
                                 .patternFilter("*.csv"),
                         e -> e.poller(p -> p.fixedRate(1000)))
-                .split(new NewlineSplitter())
+                .transform(Files.toStringTransformer())
+                .split(s -> s.delimiters("\n"))
                 .transform(csvLineToPojoTransformer())
                 .log(LoggingHandler.Level.INFO, "CustomLogger", m -> "Transformed message: " + m.getPayload())
                 .<Order, String>route(Order::getType,
                         mapping -> mapping.subFlowMapping("pizza", pizzaSubFlow())
                                 .subFlowMapping("pates", pastaSubFlow()))
                 .get();
+    }
+
+    @Bean
+    public GenericTransformer<File, List<String>> fileToStringTransformer() {
+        return file -> {
+            try {
+                return java.nio.file.Files.readAllLines(file.toPath());
+            } catch (IOException e) {
+                throw new RuntimeException("Error reading file: " + file.getAbsolutePath(), e);
+            }
+        };
     }
 
     // Transformer une ligne CSV en objet Order
@@ -68,18 +86,6 @@ public class IntegrationConfig {
         };
     }
 
-    @Bean
-    public IntegrationFlow errorHandlingFlow() {
-        return IntegrationFlow.from("errorChannel")
-                .handle((GenericTransformer<ErrorMessage, String>) (errorMessage) -> {
-                    Throwable throwable = errorMessage.getPayload().getCause();
-                    // Log or handle the error as needed
-                    System.out.println("Error occurred: " + throwable.getMessage());
-                    return null;
-                })
-                .get();
-    }
-
     // Sous-flux pour le traitement des commandes de pizza
     @Bean
     public IntegrationFlow pizzaSubFlow() {
@@ -91,20 +97,19 @@ public class IntegrationConfig {
     @Bean
     public IntegrationFlow pizzaDbFlow() {
         return f -> f
-                .handle((message -> {
+                .handle(message -> {
                     var messagePayload = (Order) message.getPayload();
                     log.info("saving pizza {} in database", messagePayload);
                     orderRepository.save(messagePayload);
-                }));
+                });
     }
 
     // Flux pour la publication des commandes de pizza sur Kafka
     @Bean
     public IntegrationFlow pizzaKafkaFlow() {
         return f -> f
-                .transform(Order.class, order -> transformOrderToKafkaEvent(order, "pizza-topic"))
-                .log(LoggingHandler.Level.INFO, "CustomLogger", m -> "pizzaKafkaFlow message: " + m.getPayload())
-                .handle(Http.outboundGateway("http://localhost:3500/v1.0/bindings/kafka-bindings")
+                .transform(this::transformOrderToKafkaEvent)
+                .handle(Http.outboundGateway("http://localhost:3500/v1.0/publish/kafka-pubsub/pizza-topic")
                         .httpMethod(HttpMethod.POST)
                         .expectedResponseType(String.class)
                         .requestFactory(requestFactory()));
@@ -126,29 +131,46 @@ public class IntegrationConfig {
     @Bean
     public IntegrationFlow pastaDbFlow() {
         return f -> f
-                .handle((message -> {
+                .handle(message -> {
                     var messagePayload = (Order) message.getPayload();
                     log.info("saving pasta {} in database", messagePayload);
                     orderRepository.save(messagePayload);
-                }));
+                });
     }
+
     // Flux pour la publication des commandes de pates sur Kafka
     @Bean
     public IntegrationFlow pastaKafkaFlow() {
         return f -> f
-                .transform(Order.class, order -> transformOrderToKafkaEvent(order, "pasta-topic"))
-                .log(LoggingHandler.Level.INFO, "CustomLogger", m -> "pastaKafkaFlow message: " + m.getPayload())
-                .handle(Http.outboundGateway(KAFKA_BINDINGS_URL)
+                .transform(this::transformOrderToKafkaEvent)
+                .handle(Http.outboundGateway("http://localhost:3500/v1.0/publish/kafka-pubsub/pasta-topic")
                         .httpMethod(HttpMethod.POST)
                         .expectedResponseType(String.class)
                         .requestFactory(requestFactory()));
     }
 
-    private Object transformOrderToKafkaEvent(Order order, String partition) {
+    //Gestion des erreurs
+    @Bean
+    public IntegrationFlow errorHandlingFlow() {
+        return IntegrationFlow.from(errorChannel())
+                .handle((GenericTransformer<ErrorMessage, String>) (errorMessage) -> {
+                    Throwable throwable = errorMessage.getPayload().getCause();
+                    // Log or handle the error as needed
+                    log.error("An error occurred during processing of CSV", throwable);
+                    return null;
+                })
+                .get();
+    }
+
+    private Object transformOrderToKafkaEvent(Order order) {
         // Transformer l'objet Order en JSON
-        var orderJson = convertOrderToJson(order);
-        // Créer le payload JSON final avec les champs partition et order
-        return String.format("{\"operation\": \"create\", \"data\": {\"topic\": \"%s\", \"value\": %s}}", partition, orderJson);
+        String jsonPayload = convertOrderToJson(order);
+        // Générer un UID aléatoire pour l'eventId
+        String eventId = UUID.randomUUID().toString();
+        // Créer le payload JSON final avec les champs eventId et data
+        var format = String.format("{\"eventId\": \"%s\", \"data\": %s}", eventId, jsonPayload);
+        log.info("Transfromed message to send to kafka by dapr : {}", format);
+        return format;
 
     }
 
