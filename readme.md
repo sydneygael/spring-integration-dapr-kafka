@@ -11,12 +11,12 @@ Assurez-vous d'avoir Docker et Dapr installés sur votre système avant de conti
 Pour lancer uniquement les services Kafka et PostgreSQL à partir du fichier docker-compose.yaml, vous pouvez utiliser la commande suivante :
 
 ```bash
-docker-compose up zookeeper kafka postgres
+docker-compose up zookeeper kafka postgres pgadmin
 ```
 
 #### v2
 ```bash
-docker compose up zookeeper kafka postgres
+docker compose up zookeeper kafka postgres pgadmin
 ```
 
 ## Etape 2 : Lancer l'application
@@ -24,7 +24,7 @@ docker compose up zookeeper kafka postgres
 ### en local
 
 ```bash
-dapr run --app-id dapr-kafka --app-port 9000 --config-path src\main\resources\docker\dapr --components-path src\main\resources\docker\dapr\components
+dapr run --app-id dapr-kafka --app-port 9000 --config src\main\resources\docker\dapr\config.yaml --resources-path src\main\resources\docker\dapr\components
 ```
 
 ### via gradle et docker compose

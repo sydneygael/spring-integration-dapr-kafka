@@ -45,7 +45,22 @@ services:
       POSTGRES_USER: admin
       POSTGRES_PASSWORD: admin
       POSTGRES_DB: demo
+    networks:
+      - pg-net
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: pgadmin_container
+    ports:
+      - "5050:80"  # Port pour accéder à pgAdmin depuis le navigateur
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "admin@example.com"  # Adresse e-mail par défaut pour l'authentification
+      PGADMIN_DEFAULT_PASSWORD: "admin"  # Mot de passe par défaut pour l'authentification
+    networks:
+      - pg-net
 
 networks:
   kafka-net:
+    driver: bridge
+  pg-net:
     driver: bridge

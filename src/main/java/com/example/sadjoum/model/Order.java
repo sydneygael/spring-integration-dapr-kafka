@@ -3,6 +3,7 @@ package com.example.sadjoum.model;
 import jakarta.persistence.*;
 
 @Entity
+@Table(name = "order_table")
 public record Order(
         @Id
         @GeneratedValue(strategy = GenerationType.IDENTITY)

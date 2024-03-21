@@ -1,10 +1,11 @@
 package com.example.sadjoum.config;
 
 import com.example.sadjoum.model.Order;
-import com.example.sadjoum.transformer.CsvToPojoTransformer;
+import com.example.sadjoum.transformer.NewlineSplitter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManagerFactory;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -16,12 +17,12 @@ import org.springframework.integration.core.GenericTransformer;
 import org.springframework.integration.dsl.ConsumerEndpointSpec;
 import org.springframework.integration.dsl.IntegrationFlow;
 import org.springframework.integration.file.dsl.Files;
+import org.springframework.integration.handler.LoggingHandler;
 import org.springframework.integration.http.dsl.Http;
 import org.springframework.integration.jpa.dsl.Jpa;
 import org.springframework.integration.jpa.dsl.JpaUpdatingOutboundEndpointSpec;
 import org.springframework.integration.jpa.support.PersistMode;
 import org.springframework.messaging.support.ErrorMessage;
-import org.springframework.messaging.support.MessageBuilder;
 
 import javax.sql.DataSource;
 import java.io.File;
@@ -29,13 +30,11 @@ import java.util.UUID;
 
 @Configuration
 @EnableIntegration
+@Slf4j
 public class IntegrationConfig {
 
     @Autowired
     private DataSource dataSource;
-
-    @Autowired
-    private CsvToPojoTransformer csvToPojoTransformer;
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
@@ -43,7 +42,7 @@ public class IntegrationConfig {
     @Value("${datasource.inputFolder}")
     private String inputFolder;
 
-    private ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
 
     @Bean
@@ -52,12 +51,27 @@ public class IntegrationConfig {
                                 .preventDuplicates(true)
                                 .patternFilter("*.csv"),
                         e -> e.poller(p -> p.fixedRate(1000)))
-                .split(Files.splitter().markers())
-                .transform(csvToPojoTransformer)
+                .split( new NewlineSplitter())
+                .transform(csvLineToPojoTransformer())
+                .log(LoggingHandler.Level.INFO, "CustomLogger", m -> "Transformed message: " + m.getPayload())
                 .<Order, String>route(Order::type,
                         mapping -> mapping.subFlowMapping("pizza", pizzaSubFlow())
                                 .subFlowMapping("pates", pastaSubFlow()))
                 .get();
+    }
+
+    @Bean
+    public GenericTransformer<String, Order> csvLineToPojoTransformer() {
+        return csvLine -> {
+            String[] parts = csvLine.split(",");
+            long orderId = Long.parseLong(parts[0].trim());
+            String type = parts[1].trim();
+            int qte = Integer.parseInt(parts[2].trim());
+            int prixUnitaire = Integer.parseInt(parts[3].trim());
+            int prixTotal = qte * prixUnitaire;
+
+            return new Order(orderId, type, qte, prixUnitaire, prixTotal);
+        };
     }
 
     @Bean
@@ -73,16 +87,6 @@ public class IntegrationConfig {
     }
 
     @Bean
-    public IntegrationFlow sendErrorToDapr(String errorMessage) {
-        return IntegrationFlow.from(errorHandlingFlow())
-                .transform(message -> MessageBuilder.withPayload("{\"message\":\"" + errorMessage + "\"}"))
-                .handle(Http.outboundGateway("http://localhost:3500/v1/pubsub/error-topic/publish")
-                        .httpMethod(HttpMethod.POST)
-                        .expectedResponseType(String.class))
-                .get();
-    }
-
-    @Bean
     public IntegrationFlow pizzaSubFlow() {
         return f -> f
                 .wireTap(pizzaDbFlow())
@@ -92,6 +96,7 @@ public class IntegrationConfig {
     @Bean
     public IntegrationFlow pizzaDbFlow() {
         return f -> f
+                .log(LoggingHandler.Level.INFO, "CustomLogger", m -> "pizzaDbFlow message: " + m.getPayload())
                 .handle(getJpaOutboundEndpointSpec(),
                         ConsumerEndpointSpec::transactional);
     }
@@ -106,6 +111,7 @@ public class IntegrationConfig {
     public IntegrationFlow pizzaKafkaFlow() {
         return f -> f
                 .transform(Order.class, this::transformOrderToKafkaEvent)
+                .log(LoggingHandler.Level.INFO, "CustomLogger", m -> "pizzaKafkaFlow message: " + m.getPayload())
                 .handle(Http.outboundGateway("http://localhost:3500/v1/pubsub/pizza-topic/publish")
                         .httpMethod(HttpMethod.POST)
                         .expectedResponseType(String.class)
@@ -135,6 +141,7 @@ public class IntegrationConfig {
     public IntegrationFlow pastaKafkaFlow() {
         return f -> f
                 .transform(Order.class, this::transformOrderToKafkaEvent)
+                .log(LoggingHandler.Level.INFO, "CustomLogger", m -> "pastaKafkaFlow message: " + m.getPayload())
                 .handle(Http.outboundGateway("http://localhost:3500/v1/pubsub/pasta-topic/publish")
                         .httpMethod(HttpMethod.POST)
                         .expectedResponseType(String.class)
@@ -148,6 +155,7 @@ public class IntegrationConfig {
         String eventId = UUID.randomUUID().toString();
         // Créer le payload JSON final avec les champs eventId et data
         return String.format("{\"eventId\": \"%s\", \"data\": %s}", eventId, jsonPayload);
+
     }
 
     private String convertOrderToJson(Order order) {
