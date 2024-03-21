@@ -1,46 +1,40 @@
 package com.example.sadjoum.config;
 
 import com.example.sadjoum.model.Order;
+import com.example.sadjoum.repository.OrderRepository;
 import com.example.sadjoum.transformer.NewlineSplitter;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import jakarta.persistence.EntityManagerFactory;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.integration.config.EnableIntegration;
 import org.springframework.integration.core.GenericTransformer;
-import org.springframework.integration.dsl.ConsumerEndpointSpec;
 import org.springframework.integration.dsl.IntegrationFlow;
 import org.springframework.integration.file.dsl.Files;
 import org.springframework.integration.handler.LoggingHandler;
 import org.springframework.integration.http.dsl.Http;
-import org.springframework.integration.jpa.dsl.Jpa;
-import org.springframework.integration.jpa.dsl.JpaUpdatingOutboundEndpointSpec;
-import org.springframework.integration.jpa.support.PersistMode;
 import org.springframework.messaging.support.ErrorMessage;
 
-import javax.sql.DataSource;
 import java.io.File;
 import java.util.UUID;
 
 @Configuration
 @EnableIntegration
+@EnableJpaRepositories
 @Slf4j
 public class IntegrationConfig {
 
-    @Autowired
-    private DataSource dataSource;
-
-    @Autowired
-    private EntityManagerFactory entityManagerFactory;
-
     @Value("${datasource.inputFolder}")
     private String inputFolder;
+
+    @Autowired
+    private OrderRepository orderRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
@@ -54,7 +48,7 @@ public class IntegrationConfig {
                 .split( new NewlineSplitter())
                 .transform(csvLineToPojoTransformer())
                 .log(LoggingHandler.Level.INFO, "CustomLogger", m -> "Transformed message: " + m.getPayload())
-                .<Order, String>route(Order::type,
+                .<Order, String>route(Order::getType,
                         mapping -> mapping.subFlowMapping("pizza", pizzaSubFlow())
                                 .subFlowMapping("pates", pastaSubFlow()))
                 .get();
@@ -96,15 +90,11 @@ public class IntegrationConfig {
     @Bean
     public IntegrationFlow pizzaDbFlow() {
         return f -> f
-                .log(LoggingHandler.Level.INFO, "CustomLogger", m -> "pizzaDbFlow message: " + m.getPayload())
-                .handle(getJpaOutboundEndpointSpec(),
-                        ConsumerEndpointSpec::transactional);
-    }
-
-    private JpaUpdatingOutboundEndpointSpec getJpaOutboundEndpointSpec() {
-        return Jpa.outboundAdapter(this.entityManagerFactory)
-                .entityClass(Order.class)
-                .persistMode(PersistMode.PERSIST);
+                .handle((message -> {
+                    var messagePayload = (Order) message.getPayload();
+                    log.info("saving pizza {} in database", messagePayload);
+                    orderRepository.save(messagePayload);
+                }));
     }
 
     @Bean
@@ -133,8 +123,12 @@ public class IntegrationConfig {
 
     @Bean
     public IntegrationFlow pastaDbFlow() {
-        return f -> f.handle(getJpaOutboundEndpointSpec(),
-                ConsumerEndpointSpec::transactional);
+        return f -> f
+                .handle((message -> {
+                    var messagePayload = (Order) message.getPayload();
+                    log.info("saving pasta {} in database", messagePayload);
+                    orderRepository.save(messagePayload);
+                }));
     }
 
     @Bean
