@@ -10,7 +10,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.data.jpa.repository.config.EnableJpaRepositories;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.integration.config.EnableIntegration;
@@ -22,14 +21,14 @@ import org.springframework.integration.http.dsl.Http;
 import org.springframework.messaging.support.ErrorMessage;
 
 import java.io.File;
-import java.util.UUID;
 
 @Configuration
 @EnableIntegration
-@EnableJpaRepositories
 @Slf4j
 public class IntegrationConfig {
 
+    // URL de l'endPoint pour les liaisons Kafka
+    public static final String KAFKA_BINDINGS_URL = "http://localhost:3500/v1.0/bindings/kafka-bindings";
     @Value("${datasource.inputFolder}")
     private String inputFolder;
 
@@ -38,14 +37,14 @@ public class IntegrationConfig {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-
+    // Configuration du flux d'intégration pour traiter les fichiers CSV
     @Bean
     public IntegrationFlow csvToDatabaseKafkaFlow() {
         return IntegrationFlow.from(Files.inboundAdapter(new File(inputFolder))
                                 .preventDuplicates(true)
                                 .patternFilter("*.csv"),
                         e -> e.poller(p -> p.fixedRate(1000)))
-                .split( new NewlineSplitter())
+                .split(new NewlineSplitter())
                 .transform(csvLineToPojoTransformer())
                 .log(LoggingHandler.Level.INFO, "CustomLogger", m -> "Transformed message: " + m.getPayload())
                 .<Order, String>route(Order::getType,
@@ -54,6 +53,7 @@ public class IntegrationConfig {
                 .get();
     }
 
+    // Transformer une ligne CSV en objet Order
     @Bean
     public GenericTransformer<String, Order> csvLineToPojoTransformer() {
         return csvLine -> {
@@ -80,11 +80,12 @@ public class IntegrationConfig {
                 .get();
     }
 
+    // Sous-flux pour le traitement des commandes de pizza
     @Bean
     public IntegrationFlow pizzaSubFlow() {
         return f -> f
-                .wireTap(pizzaDbFlow())
-                .wireTap(pizzaKafkaFlow());
+                .wireTap(pizzaDbFlow()) // Enregistrement des commandes de pizza dans la base de données
+                .wireTap(pizzaKafkaFlow()); // Publication des commandes de pizza sur Kafka
     }
 
     @Bean
@@ -97,12 +98,13 @@ public class IntegrationConfig {
                 }));
     }
 
+    // Flux pour la publication des commandes de pizza sur Kafka
     @Bean
     public IntegrationFlow pizzaKafkaFlow() {
         return f -> f
-                .transform(Order.class, this::transformOrderToKafkaEvent)
+                .transform(Order.class, order -> transformOrderToKafkaEvent(order, "pizza-topic"))
                 .log(LoggingHandler.Level.INFO, "CustomLogger", m -> "pizzaKafkaFlow message: " + m.getPayload())
-                .handle(Http.outboundGateway("http://localhost:3500/v1/pubsub/pizza-topic/publish")
+                .handle(Http.outboundGateway("http://localhost:3500/v1.0/bindings/kafka-bindings")
                         .httpMethod(HttpMethod.POST)
                         .expectedResponseType(String.class)
                         .requestFactory(requestFactory()));
@@ -130,25 +132,23 @@ public class IntegrationConfig {
                     orderRepository.save(messagePayload);
                 }));
     }
-
+    // Flux pour la publication des commandes de pates sur Kafka
     @Bean
     public IntegrationFlow pastaKafkaFlow() {
         return f -> f
-                .transform(Order.class, this::transformOrderToKafkaEvent)
+                .transform(Order.class, order -> transformOrderToKafkaEvent(order, "pasta-topic"))
                 .log(LoggingHandler.Level.INFO, "CustomLogger", m -> "pastaKafkaFlow message: " + m.getPayload())
-                .handle(Http.outboundGateway("http://localhost:3500/v1/pubsub/pasta-topic/publish")
+                .handle(Http.outboundGateway(KAFKA_BINDINGS_URL)
                         .httpMethod(HttpMethod.POST)
                         .expectedResponseType(String.class)
                         .requestFactory(requestFactory()));
     }
 
-    private Object transformOrderToKafkaEvent(Order order) {
+    private Object transformOrderToKafkaEvent(Order order, String partition) {
         // Transformer l'objet Order en JSON
-        String jsonPayload = convertOrderToJson(order);
-        // Générer un UID aléatoire pour l'eventId
-        String eventId = UUID.randomUUID().toString();
-        // Créer le payload JSON final avec les champs eventId et data
-        return String.format("{\"eventId\": \"%s\", \"data\": %s}", eventId, jsonPayload);
+        var orderJson = convertOrderToJson(order);
+        // Créer le payload JSON final avec les champs partition et order
+        return String.format("{\"operation\": \"create\", \"data\": {\"topic\": \"%s\", \"value\": %s}}", partition, orderJson);
 
     }
 

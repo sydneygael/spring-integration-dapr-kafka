@@ -11,12 +11,12 @@ Assurez-vous d'avoir Docker et Dapr installés sur votre système avant de conti
 Pour lancer uniquement les services Kafka et PostgreSQL à partir du fichier docker-compose.yaml, vous pouvez utiliser la commande suivante :
 
 ```bash
-docker-compose up zookeeper kafka postgres pgadmin
+docker-compose up zookeeper kafka akhq postgres pgadmin
 ```
 
 #### v2
 ```bash
-docker compose up zookeeper kafka postgres pgadmin
+docker compose up zookeeper kafka akhq postgres pgadmin
 ```
 
 ## Etape 2 : Lancer l'application
@@ -24,7 +24,7 @@ docker compose up zookeeper kafka postgres pgadmin
 ### en local
 
 ```bash
-dapr run --app-id dapr-kafka --app-port 9000 --config src\main\resources\docker\dapr\config.yaml --resources-path src\main\resources\docker\dapr\components
+dapr run --app-id dapr-kafka --app-port 9000 --dapr-http-port 3500 --config src\main\resources\docker\dapr\config.yaml --resources-path src\main\resources\docker\dapr\components
 ```
 
 ### via gradle et docker compose
@@ -32,6 +32,16 @@ dapr run --app-id dapr-kafka --app-port 9000 --config src\main\resources\docker\
 Pas besoin d'étape 1 dans ce cas
 
 ```bash
-./gradlew clean runApp
+./gradlew clean runApp createTopics
+```
+
+## Créer les topics 
+
+```bash
+docker-compose exec kafka /opt/kafka_2.13-2.8.1/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 --replication-factor 1 --partitions 1 --topic error-topic
+
+docker-compose exec kafka /opt/kafka_2.13-2.8.1/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 --replication-factor 1 --partitions 1 --topic pizza-topic
+
+docker-compose exec kafka /opt/kafka_2.13-2.8.1/bin/kafka-topics.sh --create --bootstrap-server kafka:9092 --replication-factor 1 --partitions 1 --topic pasta-topic
 ```
 

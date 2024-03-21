@@ -1,9 +1,9 @@
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: kafka-pubsub
+  name: kafka-bindings
 spec:
-  type: pubsub.kafka
+  type: bindings.kafka
   version: v1
   metadata:
     - name: brokers
@@ -12,7 +12,7 @@ spec:
       value: "none"  # Vous utilisez Kafka localement, donc pas d'authentification SASL
     - name: version
       value: 2.0.0
-  topics:
-    - "error-topic"
-    - "pizza-topic"
-    - "pasta-topic"
+    - name: direction
+      value: "input, output"
+    - name: topics
+      value: "error-topic,pizza-topic,pasta-topic"
