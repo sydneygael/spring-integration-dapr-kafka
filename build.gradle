@@ -83,9 +83,9 @@ task runApp(type: Exec) {
 
 task createTopics(type: Exec) {
 	// Commandes pour créer les topics Kafka
-	commandLine 'docker-compose', 'exec', 'kafka', '/opt/kafka_2.13-2.8.1/bin/kafka-topics.sh', '--create', '--bootstrap-server', 'kafka:9092', '--replication-factor', '1', '--partitions', '1', '--topic', 'error-topic'
-	commandLine 'docker-compose', 'exec', 'kafka', '/opt/kafka_2.13-2.8.1/bin/kafka-topics.sh', '--create', '--bootstrap-server', 'kafka:9092', '--replication-factor', '1', '--partitions', '1', '--topic', 'pizza-topic'
-	commandLine 'docker-compose', 'exec', 'kafka', '/opt/kafka_2.13-2.8.1/bin/kafka-topics.sh', '--create', '--bootstrap-server', 'kafka:9092', '--replication-factor', '1', '--partitions', '1', '--topic', 'pasta-topic'
+	commandLine 'docker', 'compose', 'exec', 'kafka', '/opt/kafka_2.13-2.8.1/bin/kafka-topics.sh', '--create', '--bootstrap-server', 'kafka:9092', '--replication-factor', '1', '--partitions', '1', '--topic', 'error-topic'
+	commandLine 'docker', 'compose', 'exec', 'kafka', '/opt/kafka_2.13-2.8.1/bin/kafka-topics.sh', '--create', '--bootstrap-server', 'kafka:9092', '--replication-factor', '1', '--partitions', '1', '--topic', 'pizza-topic'
+	commandLine 'docker', 'compose', 'exec', 'kafka', '/opt/kafka_2.13-2.8.1/bin/kafka-topics.sh', '--create', '--bootstrap-server', 'kafka:9092', '--replication-factor', '1', '--partitions', '1', '--topic', 'pasta-topic'
 }
 
 
