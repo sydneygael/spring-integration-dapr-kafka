@@ -6,7 +6,6 @@ services:
     container_name: "app-integration"
     ports:
       - "8080:8080"
-      - "3500:3500"
     environment:
       SPRING_PROFILES_ACTIVE: docker  # Active le profil "docker" dans l'application
     volumes:
@@ -98,3 +97,5 @@ networks:
     driver: bridge
   pg-net:
     driver: bridge
+  host-net:
+    driver: host

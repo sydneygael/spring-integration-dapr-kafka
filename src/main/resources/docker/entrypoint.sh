@@ -11,7 +11,7 @@ app_port=8080
 dapr_port=3500
 
 # Chemin des composants Dapr
-components_path="/app/dapr/components"
+resources_path="/app/dapr/components"
 
 # Chemin de l'application JAR
 app_jar="/app/myapp.jar"
@@ -25,16 +25,5 @@ dapr run \
   --app-port "$app_port" \
   --port "$dapr_port" \
   --config "$config_path" \
-  --components-path "$components_path" \
+  --resources-path "$resources_path" \
   -- java -jar "$app_jar"
-
-#!/bin/sh
-set -e
-
-# Lancement du sidecar Dapr avec l'application Java
-dapr run \
-  --app-id "mon-application" \
-  --dapr-http-port 3500 \
-  --app-port 8080 \
-  --config /app/config.yaml \
-  -- java -jar /app/mon-application.jar

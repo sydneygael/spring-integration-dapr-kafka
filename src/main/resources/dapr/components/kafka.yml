@@ -8,7 +8,10 @@ spec:
     # To learn about configuring Kafka for access across networks see
     # https://www.confluent.io/blog/kafka-client-cannot-connect-to-broker-on-aws-on-docker-etc/
     - name: brokers
-      value: "localhost:9092"  # Adresse du broker Kafka (défini dans la variable KAFKA_ADVERTISED_LISTENERS PLAINTEXT_HOST://)
+      # Adresse du broker Kafka (défini dans la variable KAFKA_ADVERTISED_LISTENERS)
+      # décommenter pour docker compose
+      value: "kafka:29092"
+      #value: "localhost:9092"
     - name: authType
       value: "none"  # Type d'authentification (none, sasl, etc.)
     - name: version
