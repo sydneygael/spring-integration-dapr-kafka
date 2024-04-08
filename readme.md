@@ -41,10 +41,13 @@ dapr run --app-id dapr-kafka --app-port 9000 --dapr-http-port 3500 --config src\
 Notez bien qu'on utilise les dernières versions de docker compose intégrées directement à docker
 
 ```bash
+./gradlew copyToResources
 docker compose up -d
 ```
 
 ## Créer les topics 
+
+Pas besoin de créer les topics en temps réel car DAPR s'en charge mais au besoin
 
 ```bash
 docker compose exec kafka /opt/kafka_2.13-2.8.1/bin/kafka-topics.sh --create --bootstrap-server kafka:29092 --replication-factor 1 --partitions 1 --topic error-topic

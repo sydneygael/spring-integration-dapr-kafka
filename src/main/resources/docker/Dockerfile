@@ -7,8 +7,7 @@ RUN apt-get update && apt-get install -y wget
 # Définition du répertoire de travail
 WORKDIR /app
 
-
 # Point d'entrée de l'application
-CMD ["java", "-jar", "votre_application.jar"]
+CMD ["java", "-jar", "/app/demo.jar"]
 # pour debugger
 #CMD ["bash", "-c", "while true; do sleep 60; done"]

@@ -4,13 +4,13 @@ services:
   demo-integration:
     image: "demo-integration-sidecar:latest"
     container_name: "app-integration"
-    ports:
-      - "8080:8080"
     environment:
       SPRING_PROFILES_ACTIVE: docker  # Active le profil "docker" dans l'application
     volumes:
-      - ./src/main/resources/docker/myapp.jar:/app/myapp.jar
+      - ./src/main/resources/docker/myapp.jar:/app/demo.jar
       - ./src/main/resources/input:/app/input
+    # le network est celui de la machine pour pouvoir publier simplement via dapr
+    network_mode: host
     depends_on:
       - kafka
       - postgres
@@ -97,5 +97,3 @@ networks:
     driver: bridge
   pg-net:
     driver: bridge
-  host-net:
-    driver: host
